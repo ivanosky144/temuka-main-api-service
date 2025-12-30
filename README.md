@@ -11,13 +11,13 @@ This project is the backend service for implementing these domain features in Te
 9. Report System
 10. Notification
 11. Content Moderation
-12. Search System
 
 # Tech Stack
 - Golang (Programming language)
 - Redis (Non relational database)
 - PostgreSQL (Relational database)
 - AWS S3 (Cloud file storage)
+- RabbitMQ (Message queue)
 
 # Command
 1. Run the server
