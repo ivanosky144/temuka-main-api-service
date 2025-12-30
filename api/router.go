@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gorilla/mux"
 	"github.com/temuka-api-service/internal/handler"
+	"github.com/temuka-api-service/internal/publisher"
 	"github.com/temuka-api-service/internal/repository"
 	"github.com/temuka-api-service/internal/service"
 	"github.com/temuka-api-service/middleware"
@@ -28,10 +29,13 @@ func Routes(db database.PostgresWrapper, redis keyValueStore.RedisWrapper, stora
 	locationRepo := repository.NewLocationRepository(db)
 	conversationRepo := repository.NewConversationRepository(db)
 
+	// Init publishers
+	searchIndexPublisher := publisher.NewSearchIndexPublisher(rmq)
+
 	// Init services
 	userService := service.NewUserService(userRepo)
 	authService := service.NewAuthService(userRepo)
-	postService := service.NewPostService(postRepo, userRepo, commentRepo, notificationRepo, communityRepo, redis, rmq)
+	postService := service.NewPostService(postRepo, userRepo, commentRepo, notificationRepo, communityRepo, redis, searchIndexPublisher)
 	notificationService := service.NewNotificationService(notificationRepo)
 	commentService := service.NewCommentService(commentRepo, postRepo, notificationRepo, reportRepo)
 	communityService := service.NewCommunityService(communityRepo)

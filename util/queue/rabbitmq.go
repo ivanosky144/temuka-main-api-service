@@ -147,7 +147,7 @@ func (c *RabbitMQChannel) InitQueue(exchangeName, routingKey string, durable, au
 	return queue, nil
 }
 
-func (c *RabbitMQChannel) PublishMessage(exchangeName, routingKey string, body []byte) error {
+func (c *RabbitMQChannel) PublishMessage(exchangeName, routingKey string, body interface{}) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message body: %w", err)

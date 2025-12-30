@@ -1,29 +1,21 @@
 package constant
 
 const (
-	ExchangeName = "temuka_exchange"
+	SearchExchange         = "temuka_search_exchange"
+	RecommendationExchange = "temuka_recommendation_exchange"
+	AnalyticsExchange      = "temuka_analytics_exchange"
 
-	PostCreatedRoutingKey = "post.created"
-	PostUpdatedRoutingKey = "post.updated"
-	PostDeletedRoutingKey = "post.deleted"
-	PostLikedRoutingKey   = "post.liked"
-	PostViewedRoutingKey  = "post.viewed"
+	SearcSyncRoutingKey            = "search.sync"
+	RecommendationUpdateRoutingKey = "recommendation.update"
+	AnalyticsEventRoutingKey       = "analytics.event"
 
-	UserCreatedRoutingKey    = "user.created"
-	UserUpdatedRoutingKey    = "user.updated"
-	UserFollowedRoutingKey   = "user.followed"
-	UserUnfollowedRoutingKey = "user.unfollowed"
+	EventOperationCreate = "CREATE"
+	EventOperationDelete = "DELETE"
+	EventOperationUpdate = "UPDATE"
 
-	CommentCreatedRoutingKey = "comment.created"
-	CommentDeletedRoutingKey = "comment.deleted"
-
-	CommunityViewedRoutingKey = "community.viewed"
-	CommunityJoinedRoutingKey = "community.joined"
-	CommunityLeftRoutingKey   = "community.left"
-
-	UniversityViewedRoutingKey   = "university.viewed"
-	UniversityReviewedRoutingKey = "university.reviewed"
-
-	MajorViewedRoutingKey   = "major.viewed"
-	MajorReviewedRoutingKey = "major.reviewed"
+	EventEntityTypePost       = "POST"
+	EventEntityTypeUser       = "USER"
+	EventEntityTypeCommunity  = "COMMUNITY"
+	EventEntityTypeUniversity = "UNIVERSITY"
+	EventEntityTypeMajor      = "MAJOR"
 )

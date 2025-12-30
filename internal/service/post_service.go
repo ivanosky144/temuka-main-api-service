@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,9 +9,9 @@ import (
 	"github.com/temuka-api-service/internal/constant"
 	"github.com/temuka-api-service/internal/dto"
 	"github.com/temuka-api-service/internal/model"
+	"github.com/temuka-api-service/internal/publisher"
 	"github.com/temuka-api-service/internal/repository"
 	"github.com/temuka-api-service/util/key_value_store"
-	"github.com/temuka-api-service/util/queue"
 	"gorm.io/gorm"
 )
 
@@ -27,13 +26,13 @@ type PostService interface {
 }
 
 type PostServiceImpl struct {
-	postRepo         repository.PostRepository
-	userRepo         repository.UserRepository
-	commentRepo      repository.CommentRepository
-	notificationRepo repository.NotificationRepository
-	communityRepo    repository.CommunityRepository
-	redis            key_value_store.RedisWrapper
-	rmq              queue.RabbitMQChannel
+	postRepo             repository.PostRepository
+	userRepo             repository.UserRepository
+	commentRepo          repository.CommentRepository
+	notificationRepo     repository.NotificationRepository
+	communityRepo        repository.CommunityRepository
+	redis                key_value_store.RedisWrapper
+	searchIndexPublisher publisher.SearchIndexPublisher
 }
 
 func NewPostService(
@@ -43,16 +42,16 @@ func NewPostService(
 	notificationRepo repository.NotificationRepository,
 	communityRepo repository.CommunityRepository,
 	redis key_value_store.RedisWrapper,
-	rmq queue.RabbitMQChannel,
+	searchIndexPublisher publisher.SearchIndexPublisher,
 ) PostService {
 	return &PostServiceImpl{
-		postRepo:         postRepo,
-		userRepo:         userRepo,
-		commentRepo:      commentRepo,
-		notificationRepo: notificationRepo,
-		communityRepo:    communityRepo,
-		redis:            redis,
-		rmq:              rmq,
+		postRepo:             postRepo,
+		userRepo:             userRepo,
+		commentRepo:          commentRepo,
+		notificationRepo:     notificationRepo,
+		communityRepo:        communityRepo,
+		redis:                redis,
+		searchIndexPublisher: searchIndexPublisher,
 	}
 }
 
@@ -71,32 +70,11 @@ func (s *PostServiceImpl) CreatePost(ctx context.Context, req *dto.CreatePostReq
 		return nil, errors.New("error updating community posts count")
 	}
 
-	event := dto.PublisherEvent{
-		Event:     "post.created",
-		Timestamp: time.Now().Unix(),
-		Data: dto.PostCreatedEventData{
-			PostID:      newPost.ID,
-			UserID:      req.UserID,
-			CommunityID: req.CommunityID,
-			Title:       req.Title,
-			Description: req.Description,
-		},
-	}
-
-	eventBytes, err := json.Marshal(event)
-	if err != nil {
-		return nil, errors.New("error marshalling post created event")
-	} else {
-		err = s.rmq.PublishMessage(
-			constant.ExchangeName,
-			constant.PostCreatedRoutingKey,
-			eventBytes,
-		)
-
-		if err != nil {
-			return nil, errors.New("error publishing post created event")
-		}
-	}
+	go s.searchIndexPublisher.PublishSyncEvent(constant.EventOperationCreate, constant.EventEntityTypePost, fmt.Sprintf("%d", newPost.ID), map[string]interface{}{
+		"title":       newPost.Title,
+		"description": newPost.Description,
+		"user_id":     newPost.UserID,
+	})
 
 	return &newPost, nil
 }
@@ -186,31 +164,6 @@ func (s *PostServiceImpl) LikePost(ctx context.Context, postID, userID int) erro
 	post.Likes = append(post.Likes, &model.User{ID: userID})
 	if err := s.postRepo.UpdatePost(ctx, postID, post); err != nil {
 		return err
-	}
-
-	event := dto.PublisherEvent{
-		Event:     "post.liked",
-		Timestamp: time.Now().Unix(),
-		Data: dto.PostLikedEventData{
-			PostID:        post.ID,
-			PostOwnerID:   post.UserID,
-			LikedByUserID: userID,
-		},
-	}
-
-	eventBytes, err := json.Marshal(event)
-	if err != nil {
-		return errors.New("error marshalling post liked event")
-	} else {
-		err = s.rmq.PublishMessage(
-			constant.ExchangeName,
-			constant.PostLikedRoutingKey,
-			eventBytes,
-		)
-
-		if err != nil {
-			return errors.New("error publishing post liked event")
-		}
 	}
 
 	notification := model.Notification{
