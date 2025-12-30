@@ -2,62 +2,82 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type UniversityRepository interface {
 	CreateUniversity(ctx context.Context, university *model.University) error
 	UpdateUniversity(ctx context.Context, id int, university *model.University) error
-	GetUniversities(ctx context.Context) ([]model.University, error)
+	GetUniversityList(ctx context.Context) ([]model.University, error)
 	DeleteUniversity(ctx context.Context, id int) error
-	GetUniversityDetailByID(ctx context.Context, id int) (*model.University, error)
-	GetUniversityDetailBySlug(ctx context.Context, slug string) (*model.University, error)
+	GetUniversityByID(ctx context.Context, id int) (*model.University, error)
+	GetUniversityBySlug(ctx context.Context, slug string) (*model.University, error)
 }
 
 type UniversityRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewUniversityRepository(db *gorm.DB) UniversityRepository {
+func NewUniversityRepository(db database.PostgresWrapper) UniversityRepository {
 	return &UniversityRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *UniversityRepositoryImpl) CreateUniversity(ctx context.Context, university *model.University) error {
-	return r.db.WithContext(ctx).Create(university).Error
+	if err := r.db.Create(ctx, university); err != nil {
+		return fmt.Errorf("failed to create university: %w", err)
+	}
+	return nil
 }
 
 func (r *UniversityRepositoryImpl) DeleteUniversity(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.University{}, id).Error
-}
-
-func (r *UniversityRepositoryImpl) UpdateUniversity(ctx context.Context, id int, post *model.University) error {
-	return r.db.WithContext(ctx).Model(&model.University{}).Where("id = ?", id).Updates(post).Error
-}
-
-func (r *UniversityRepositoryImpl) GetUniversities(ctx context.Context) ([]model.University, error) {
-	var universities []model.University
-	if err := r.db.WithContext(ctx).Find(&universities).Error; err != nil {
-		return nil, err
+	if err := r.db.Delete(ctx, &model.University{}, id); err != nil {
+		return fmt.Errorf("failed to delete university: %w", err)
 	}
+	return nil
+}
+
+func (r *UniversityRepositoryImpl) UpdateUniversity(ctx context.Context, id int, university *model.University) error {
+	q := r.db.Model(ctx, &model.University{}).Where("id = ?", id)
+
+	if err := q.Updates(university).Error; err != nil {
+		return fmt.Errorf("failed to update university: %w", err)
+	}
+
+	return nil
+}
+
+func (r *UniversityRepositoryImpl) GetUniversityList(ctx context.Context) ([]model.University, error) {
+	var universities []model.University
+
+	if err := r.db.Find(ctx, &universities); err != nil {
+		return nil, fmt.Errorf("failed to get university list: %w", err)
+	}
+
 	return universities, nil
 }
 
-func (r *UniversityRepositoryImpl) GetUniversityDetailByID(ctx context.Context, id int) (*model.University, error) {
+func (r *UniversityRepositoryImpl) GetUniversityByID(ctx context.Context, id int) (*model.University, error) {
 	var university model.University
-	if err := r.db.WithContext(ctx).First(&university, id).Error; err != nil {
-		return nil, err
+
+	if err := r.db.First(ctx, &university, id); err != nil {
+		return nil, fmt.Errorf("failed to get university by id: %w", err)
 	}
+
 	return &university, nil
 }
 
-func (r *UniversityRepositoryImpl) GetUniversityDetailBySlug(ctx context.Context, slug string) (*model.University, error) {
+func (r *UniversityRepositoryImpl) GetUniversityBySlug(ctx context.Context, slug string) (*model.University, error) {
 	var university model.University
-	if err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&university).Error; err != nil {
-		return nil, err
+
+	err := r.db.Where(ctx, "slug = ?", slug).First(ctx, &university)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get university by slug: %w", err)
 	}
+
 	return &university, nil
 }

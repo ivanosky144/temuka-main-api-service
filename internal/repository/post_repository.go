@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type PostRepository interface {
@@ -16,37 +17,55 @@ type PostRepository interface {
 }
 
 type PostRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewPostRepository(db *gorm.DB) PostRepository {
+func NewPostRepository(db database.PostgresWrapper) PostRepository {
 	return &PostRepositoryImpl{db: db}
 }
 
 func (r *PostRepositoryImpl) CreatePost(ctx context.Context, post *model.Post) error {
-	return r.db.WithContext(ctx).Create(post).Error
+	if err := r.db.Create(ctx, post); err != nil {
+		return fmt.Errorf("failed to create post: %w", err)
+	}
+	return nil
 }
 
 func (r *PostRepositoryImpl) GetPostDetailByID(ctx context.Context, id int) (*model.Post, error) {
 	var post model.Post
-	if err := r.db.WithContext(ctx).First(&post, id).Error; err != nil {
-		return nil, err
+
+	if err := r.db.First(ctx, &post, id); err != nil {
+		return nil, fmt.Errorf("failed to get post detail: %w", err)
 	}
+
 	return &post, nil
 }
 
 func (r *PostRepositoryImpl) DeletePost(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.Post{}, id).Error
+	if err := r.db.Delete(ctx, &model.Post{}, id); err != nil {
+		return fmt.Errorf("failed to delete post: %w", err)
+	}
+	return nil
 }
 
 func (r *PostRepositoryImpl) UpdatePost(ctx context.Context, id int, post *model.Post) error {
-	return r.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Updates(post).Error
+	q := r.db.Model(ctx, &model.Post{}).Where("id = ?", id)
+
+	if err := q.Updates(post).Error; err != nil {
+		return fmt.Errorf("failed to update post: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PostRepositoryImpl) GetPostsByUserID(ctx context.Context, userId int) ([]model.Post, error) {
 	var posts []model.Post
-	if err := r.db.WithContext(ctx).Where("user_id", userId).Find(&posts).Error; err != nil {
-		return nil, err
+
+	q := r.db.Where(ctx, "user_id = ?", userId)
+
+	if err := q.Find(&posts).Error; err != nil {
+		return nil, fmt.Errorf("failed to get posts by user id: %w", err)
 	}
+
 	return posts, nil
 }

@@ -2,19 +2,31 @@ package main
 
 import (
 	"log"
+	"os"
 
-	"github.com/temuka-api-service/config"
+	"github.com/joho/godotenv"
 	"github.com/temuka-api-service/internal/model"
+	"github.com/temuka-api-service/util/database"
 )
 
 func main() {
-	config.OpenConnection()
-
-	if config.Database == nil {
-		log.Fatal("Database connection is nil")
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+		os.Exit(1)
 	}
 
-	if err := config.Database.AutoMigrate(
+	postgres, err := database.NewPostgreSQL(
+		os.Getenv("PG_HOST"),
+		os.Getenv("PG_USER"),
+		os.Getenv("PG_PASSWORD"),
+		os.Getenv("PG_PORT"),
+		os.Getenv("PG_DATABASE"),
+	)
+	if err != nil {
+		log.Fatalf("Error connecting to database: %v", err)
+	}
+
+	if err := postgres.DB.AutoMigrate(
 		&model.User{},
 		&model.Community{},
 		&model.Post{},

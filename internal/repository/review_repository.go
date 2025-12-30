@@ -2,39 +2,50 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type ReviewRepository interface {
-	CreateReview(ctx context.Context, review *model.Review) error
+	SetReview(ctx context.Context, review *model.Review) error
 	DeleteReview(ctx context.Context, id int) error
 	GetReviewsByUniversityID(ctx context.Context, universityID int) ([]model.Review, error)
 }
 
 type ReviewRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewReviewRepository(db *gorm.DB) ReviewRepository {
+func NewReviewRepository(db database.PostgresWrapper) ReviewRepository {
 	return &ReviewRepositoryImpl{
 		db: db,
 	}
 }
 
-func (r *ReviewRepositoryImpl) CreateReview(ctx context.Context, review *model.Review) error {
-	return r.db.WithContext(ctx).Create(&review).Error
+// SetReview = create/upsert
+func (r *ReviewRepositoryImpl) SetReview(ctx context.Context, review *model.Review) error {
+	if err := r.db.Create(ctx, review); err != nil {
+		return fmt.Errorf("failed to set review: %w", err)
+	}
+	return nil
 }
 
 func (r *ReviewRepositoryImpl) DeleteReview(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.Review{}, id).Error
+	if err := r.db.Delete(ctx, &model.Review{}, id); err != nil {
+		return fmt.Errorf("failed to delete review: %w", err)
+	}
+	return nil
 }
 
 func (r *ReviewRepositoryImpl) GetReviewsByUniversityID(ctx context.Context, universityID int) ([]model.Review, error) {
 	var reviews []model.Review
-	if err := r.db.WithContext(ctx).Where("university_id = ?", universityID).Find(&reviews).Error; err != nil {
-		return nil, err
+
+	err := r.db.Where(ctx, "university_id = ?", universityID).Find(&reviews)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get reviews: %w", err)
 	}
+
 	return reviews, nil
 }

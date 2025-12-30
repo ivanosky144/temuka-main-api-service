@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type ModeratorRepository interface {
@@ -14,27 +15,35 @@ type ModeratorRepository interface {
 }
 
 type ModeratorRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewModeratorRepository(db *gorm.DB) ModeratorRepository {
+func NewModeratorRepository(db database.PostgresWrapper) ModeratorRepository {
 	return &ModeratorRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *ModeratorRepositoryImpl) CreateModerator(ctx context.Context, moderator *model.Moderator) error {
-	return r.db.WithContext(ctx).Create(moderator).Error
+	if err := r.db.Create(ctx, moderator); err != nil {
+		return fmt.Errorf("failed to create moderator: %w", err)
+	}
+	return nil
 }
 
 func (r *ModeratorRepositoryImpl) GetModeratorsByCommunityID(ctx context.Context, communityId int) ([]model.Moderator, error) {
 	var moderators []model.Moderator
-	if err := r.db.WithContext(ctx).Where("community_id = ?", communityId).Error; err != nil {
-		return nil, err
+
+	if err := r.db.Where(ctx, &moderators, "community_id = ?", communityId); err != nil {
+		return nil, fmt.Errorf("failed to get moderators: %w", err)
 	}
+
 	return moderators, nil
 }
 
 func (r *ModeratorRepositoryImpl) DeleteModerator(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.Moderator{}, id).Error
+	if err := r.db.Delete(ctx, &model.Moderator{}, id); err != nil {
+		return fmt.Errorf("failed to delete moderator: %w", err)
+	}
+	return nil
 }

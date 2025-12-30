@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type ConversationRepository interface {
@@ -18,51 +19,72 @@ type ConversationRepository interface {
 }
 
 type ConversationRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewConversationRepository(db *gorm.DB) ConversationRepository {
+func NewConversationRepository(db database.PostgresWrapper) ConversationRepository {
 	return &ConversationRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *ConversationRepositoryImpl) CreateConversation(ctx context.Context, conversation *model.Conversation) error {
-	return r.db.WithContext(ctx).Create(conversation).Error
+	if err := r.db.Create(ctx, conversation); err != nil {
+		return fmt.Errorf("failed to create conversation: %w", err)
+	}
+	return nil
 }
 
 func (r *ConversationRepositoryImpl) GetConversationsByUserID(ctx context.Context, userID int) ([]model.Conversation, error) {
 	var conversations []model.Conversation
-	if err := r.db.Where("user_id = ?", userID).Find(&conversations).Error; err != nil {
-		return nil, err
+
+	err := r.db.Where(ctx, "user_id = ?", userID).Find(&conversations)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get conversations: %w", err)
 	}
+
 	return conversations, nil
 }
 
 func (r *ConversationRepositoryImpl) DeleteConversation(ctx context.Context, id int) error {
-	return r.db.Delete(&model.Conversation{}, id).Error
+	if err := r.db.Delete(ctx, &model.Conversation{}, id); err != nil {
+		return fmt.Errorf("failed to delete conversation: %w", err)
+	}
+	return nil
 }
 
 func (r *ConversationRepositoryImpl) AddMessage(ctx context.Context, message *model.Message) error {
-	return r.db.WithContext(ctx).Create(message).Error
+	if err := r.db.Create(ctx, message); err != nil {
+		return fmt.Errorf("failed to add message: %w", err)
+	}
+	return nil
 }
 
 func (r *ConversationRepositoryImpl) GetConversationDetailByID(ctx context.Context, id int) (*model.Conversation, error) {
 	var conversation model.Conversation
-	if err := r.db.WithContext(ctx).First(&conversation, id).Error; err != nil {
-		return nil, err
+
+	err := r.db.First(ctx, &conversation, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get conversation detail: %w", err)
 	}
+
 	return &conversation, nil
 }
 
 func (r *ConversationRepositoryImpl) AddParticipant(ctx context.Context, participant *model.Participant) error {
-	return r.db.WithContext(ctx).Create(participant).Error
+	if err := r.db.Create(ctx, participant); err != nil {
+		return fmt.Errorf("failed to add participant: %w", err)
+	}
+	return nil
 }
 
 func (r *ConversationRepositoryImpl) GetMessagesByConversationID(ctx context.Context, conversationID int) ([]model.Message, error) {
 	var messages []model.Message
-	if err := r.db.WithContext(ctx).Where("conversation_id = ?", conversationID).Find(&messages).Error; err != nil {
-		return nil, err
+
+	err := r.db.Where(ctx, "conversation_id = ?", conversationID).Find(&messages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
+
 	return messages, nil
 }

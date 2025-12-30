@@ -11,6 +11,7 @@ type Report struct {
 	ID        int       `gorm:"primary_key;column:id"`
 	PostID    *int      `gorm:"column:post_id;null"`
 	CommentID *int      `gorm:"column:comment_id;null"`
+	Reason    string    `gorm:"column:reason;type:text;not null"`
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdateAt  time.Time `gorm:"column:updated_at;autoCreateTime;autoUpdateTime"`
 }

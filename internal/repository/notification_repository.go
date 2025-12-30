@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type NotificationRepository interface {
@@ -13,21 +14,28 @@ type NotificationRepository interface {
 }
 
 type NotificationRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewNotificationRepository(db *gorm.DB) NotificationRepository {
-	return &NotificationRepositoryImpl{db: db}
+func NewNotificationRepository(db database.PostgresWrapper) NotificationRepository {
+	return &NotificationRepositoryImpl{
+		db: db,
+	}
 }
 
 func (r *NotificationRepositoryImpl) CreateNotification(ctx context.Context, notification *model.Notification) error {
-	return r.db.WithContext(ctx).Create(notification).Error
+	if err := r.db.Create(ctx, notification); err != nil {
+		return fmt.Errorf("failed to create notification: %w", err)
+	}
+	return nil
 }
 
 func (r *NotificationRepositoryImpl) GetNotificationsByUserID(ctx context.Context, userId int) ([]model.Notification, error) {
 	var notifications []model.Notification
-	if err := r.db.WithContext(ctx).Where("user_id", userId).Find(&notifications).Error; err != nil {
-		return nil, err
+
+	if err := r.db.Where(ctx, &notifications, "user_id = ?", userId); err != nil {
+		return nil, fmt.Errorf("failed to get notifications: %w", err)
 	}
+
 	return notifications, nil
 }

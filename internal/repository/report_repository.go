@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type ReportRepository interface {
@@ -13,19 +14,25 @@ type ReportRepository interface {
 }
 
 type ReportRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewReportRepository(db *gorm.DB) ReportRepository {
+func NewReportRepository(db database.PostgresWrapper) ReportRepository {
 	return &ReportRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *ReportRepositoryImpl) CreateReport(ctx context.Context, report *model.Report) error {
-	return r.db.WithContext(ctx).Create(report).Error
+	if err := r.db.Create(ctx, report); err != nil {
+		return fmt.Errorf("failed to create report: %w", err)
+	}
+	return nil
 }
 
 func (r *ReportRepositoryImpl) DeleteReport(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.Report{}, id).Error
+	if err := r.db.Delete(ctx, &model.Report{}, id); err != nil {
+		return fmt.Errorf("failed to delete report: %w", err)
+	}
+	return nil
 }

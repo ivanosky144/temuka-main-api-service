@@ -1,14 +1,17 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/joho/godotenv"
 	router "github.com/temuka-api-service/api"
-	"github.com/temuka-api-service/config"
-	"github.com/temuka-api-service/internal/queue"
-	"gorm.io/gorm"
+	"github.com/temuka-api-service/internal/constant"
+	"github.com/temuka-api-service/util/database"
+	"github.com/temuka-api-service/util/file_storage"
+	"github.com/temuka-api-service/util/key_value_store"
+	"github.com/temuka-api-service/util/queue"
 )
 
 func EnableCors(next http.Handler) http.Handler {
@@ -25,23 +28,55 @@ func EnableCors(next http.Handler) http.Handler {
 }
 
 func main() {
-	config.OpenConnection()
-	var db *gorm.DB = config.GetDBInstance()
-
-	if config.Database == nil {
-		log.Fatal("Database connection is nil")
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+		os.Exit(1)
 	}
 
-	config.InitRedis()
-	config.InitS3()
+	postgres, err := database.NewPostgreSQL(
+		os.Getenv(constant.EnvPgHost),
+		os.Getenv(constant.EnvPgUser),
+		os.Getenv(constant.EnvPgPass),
+		os.Getenv(constant.EnvPgPort),
+		os.Getenv(constant.EnvPgDB),
+	)
+	if err != nil {
+		log.Fatalf("Error initiating relational database: %v", err)
+	}
 
-	router := router.Routes(db)
+	redis, err := key_value_store.NewRedisConnection(
+		os.Getenv(constant.EnvRedisHost),
+		os.Getenv(constant.EnvRedisUser),
+		os.Getenv(constant.EnvRedisPass),
+	)
+	if err != nil {
+		log.Fatalf("Error initiating key value store: %v", err)
+	}
+
+	storage, err := file_storage.NewS3(
+		os.Getenv(constant.EnvAWSRegion),
+		os.Getenv(constant.EnvAWSAccessKeyID),
+		os.Getenv(constant.EnvAWSSecretAccessKey),
+		os.Getenv(constant.EnvS3Bucket),
+	)
+	if err != nil {
+		log.Fatalf("Error initiating file storage: %v", err)
+	}
+
+	rmq, err := queue.NewRabbitMQConnection(
+		os.Getenv(constant.EnvRabbitMQURL),
+	)
+	if err != nil {
+		log.Fatalf("Error initiating message queue: %v", err)
+	}
+
+	mqChannel, err := rmq.Channel()
+	if err != nil {
+		log.Fatalf("Error creating message queue channel: %v", err)
+	}
+
+	router := router.Routes(*postgres, *redis, *storage, *mqChannel)
 	protectedRoutes := EnableCors(router)
-
-	http.HandleFunc("/chat", config.HandleWebSocket)
-	go config.RecentHub.Run()
-
-	queue.StartListening(context.Background())
 
 	http.Handle("/", protectedRoutes)
 	log.Println("Server is listening on port 3200")

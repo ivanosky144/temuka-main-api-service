@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type CommentRepository interface {
@@ -16,43 +17,58 @@ type CommentRepository interface {
 }
 
 type CommentRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewCommentRepository(db *gorm.DB) CommentRepository {
+func NewCommentRepository(db database.PostgresWrapper) CommentRepository {
 	return &CommentRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *CommentRepositoryImpl) CreateComment(ctx context.Context, comment *model.Comment) error {
-	return r.db.WithContext(ctx).Create(comment).Error
+	err := r.db.Create(ctx, comment)
+	if err != nil {
+		return fmt.Errorf("failed to create comment: %w", err)
+	}
+	return nil
 }
 
 func (r *CommentRepositoryImpl) GetCommentsByPostID(ctx context.Context, postID int) ([]model.Comment, error) {
 	var comments []model.Comment
-	if err := r.db.Where("post_id = ?", postID).Find(&comments).Error; err != nil {
-		return nil, err
+
+	db := r.db.Where(ctx, "post_id = ?", postID)
+	if err := db.Find(&comments).Error; err != nil {
+		return nil, fmt.Errorf("failed to get comments: %w", err)
 	}
+
 	return comments, nil
 }
 
 func (r *CommentRepositoryImpl) DeleteComment(ctx context.Context, commentID int) error {
-	return r.db.Delete(&model.Comment{}, commentID).Error
+	if err := r.db.Delete(ctx, &model.Comment{}, commentID); err != nil {
+		return fmt.Errorf("failed to delete comment: %w", err)
+	}
+	return nil
 }
 
 func (r *CommentRepositoryImpl) GetRepliesByParentID(ctx context.Context, parentID int) ([]model.Comment, error) {
-	var comments []model.Comment
-	if err := r.db.Where("parent_id = ?", parentID).Find(&comments).Error; err != nil {
-		return nil, err
+	var replies []model.Comment
+
+	db := r.db.Where(ctx, "parent_id = ?", parentID)
+	if err := db.Find(&replies).Error; err != nil {
+		return nil, fmt.Errorf("failed to get replies: %w", err)
 	}
-	return comments, nil
+
+	return replies, nil
 }
 
 func (r *CommentRepositoryImpl) GetCommentDetailByID(ctx context.Context, id int) (*model.Comment, error) {
 	var comment model.Comment
-	if err := r.db.WithContext(ctx).First(&comment, id).Error; err != nil {
-		return nil, err
+
+	if err := r.db.First(ctx, &comment, id); err != nil {
+		return nil, fmt.Errorf("failed to get comment detail: %w", err)
 	}
+
 	return &comment, nil
 }

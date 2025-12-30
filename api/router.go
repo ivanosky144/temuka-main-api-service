@@ -2,13 +2,17 @@ package router
 
 import (
 	"github.com/gorilla/mux"
-	"github.com/temuka-api-service/internal/controller"
+	"github.com/temuka-api-service/internal/handler"
 	"github.com/temuka-api-service/internal/repository"
+	"github.com/temuka-api-service/internal/service"
 	"github.com/temuka-api-service/middleware"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
+	fileStorage "github.com/temuka-api-service/util/file_storage"
+	keyValueStore "github.com/temuka-api-service/util/key_value_store"
+	"github.com/temuka-api-service/util/queue"
 )
 
-func Routes(db *gorm.DB) *mux.Router {
+func Routes(db database.PostgresWrapper, redis keyValueStore.RedisWrapper, storage fileStorage.S3Wrapper, rmq queue.RabbitMQChannel) *mux.Router {
 	router := mux.NewRouter()
 
 	// Init repositories
@@ -24,104 +28,118 @@ func Routes(db *gorm.DB) *mux.Router {
 	locationRepo := repository.NewLocationRepository(db)
 	conversationRepo := repository.NewConversationRepository(db)
 
+	// Init services
+	userService := service.NewUserService(userRepo)
+	authService := service.NewAuthService(userRepo)
+	postService := service.NewPostService(postRepo, userRepo, commentRepo, notificationRepo, communityRepo, redis, rmq)
+	notificationService := service.NewNotificationService(notificationRepo)
+	commentService := service.NewCommentService(commentRepo, postRepo, notificationRepo, reportRepo)
+	communityService := service.NewCommunityService(communityRepo)
+	moderatorService := service.NewModeratorService(moderatorRepo, notificationRepo)
+	reportService := service.NewReportService(reportRepo)
+	universityService := service.NewUniversityService(universityRepo, reviewRepo)
+	locationService := service.NewLocationService(locationRepo)
+	conversationService := service.NewConversationService(conversationRepo, userRepo)
+	fileService := service.NewFileService(storage)
+
 	// Init controllers
-	authController := controller.NewAuthController(userRepo)
-	userController := controller.NewUserController(userRepo)
-	postController := controller.NewPostController(postRepo, notificationRepo, userRepo, reportRepo, communityRepo, commentRepo)
-	communityController := controller.NewCommunityController(communityRepo)
-	commentController := controller.NewCommentController(commentRepo, postRepo, notificationRepo, reportRepo)
-	notificationController := controller.NewNotificationController(notificationRepo)
-	moderatorController := controller.NewModeratorController(moderatorRepo, notificationRepo)
-	reportController := controller.NewReportController(reportRepo)
-	universityController := controller.NewUniversityController(universityRepo, reviewRepo)
-	locationController := controller.NewLocationController(locationRepo)
-	conversationController := controller.NewConversationController(conversationRepo, userRepo)
-	fileUploadController := controller.NewFileUploadController("uploads")
+	authHandler := handler.NewAuthHandler(authService)
+	userHandler := handler.NewUserHandler(userService)
+	postHandler := handler.NewPostHandler(postService)
+	communityHandler := handler.NewCommunityHandler(communityService)
+	commentHandler := handler.NewCommentHandler(commentService)
+	notificationHandler := handler.NewNotificationHandler(notificationService)
+	moderatorHandler := handler.NewModeratorHandler(moderatorService)
+	reportHandler := handler.NewReportHandler(reportService)
+	universityHandler := handler.NewUniversityHandler(universityService)
+	locationHandler := handler.NewLocationHandler(locationService)
+	conversationHandler := handler.NewConversationHandler(conversationService)
+	fileUploadHandler := handler.NewFileHandler(fileService)
 
 	// Init routers
 	authRouter := router.PathPrefix("/api/auth").Subrouter()
-	authRouter.HandleFunc("/login", authController.Login).Methods("POST")
-	authRouter.HandleFunc("/register", authController.Register).Methods("POST")
-	authRouter.HandleFunc("/resetPassword/{id}", authController.ResetPassword).Methods("POST")
+	authRouter.HandleFunc("/login", authHandler.Login).Methods("POST")
+	authRouter.HandleFunc("/register", authHandler.Register).Methods("POST")
+	authRouter.HandleFunc("/resetPassword/{id}", authHandler.ResetPassword).Methods("POST")
 
 	userRouter := router.PathPrefix("/api/user").Subrouter()
 	userRouter.Use(middleware.CheckAuth)
-	userRouter.HandleFunc("", userController.CreateUser).Methods("POST")
-	userRouter.HandleFunc("/{id}", userController.UpdateUser).Methods("PUT")
-	userRouter.HandleFunc("/search", userController.SearchUsers).Methods("GET")
-	userRouter.HandleFunc("/follow", userController.FollowUser).Methods("POST")
-	userRouter.HandleFunc("/followers", userController.GetFollowers).Methods("GET")
-	userRouter.HandleFunc("/{id}", userController.GetUserDetail).Methods("GET")
+	userRouter.HandleFunc("", userHandler.CreateUser).Methods("POST")
+	userRouter.HandleFunc("/{id}", userHandler.UpdateUser).Methods("PUT")
+	userRouter.HandleFunc("/search", userHandler.SearchUsers).Methods("GET")
+	userRouter.HandleFunc("/follow", userHandler.FollowUser).Methods("POST")
+	userRouter.HandleFunc("/followers", userHandler.GetFollowers).Methods("GET")
+	userRouter.HandleFunc("/{id}", userHandler.GetUserDetail).Methods("GET")
 
 	postRouter := router.PathPrefix("/api/post").Subrouter()
 	postRouter.Use(middleware.CheckAuth)
-	postRouter.HandleFunc("", postController.CreatePost).Methods("POST")
-	postRouter.HandleFunc("/{id}", postController.GetPostDetail).Methods("GET")
-	postRouter.HandleFunc("/timeline/{user_id}", postController.GetTimelinePosts).Methods("GET")
-	postRouter.HandleFunc("/user/{user_id}", postController.GetUserPosts).Methods("GET")
-	postRouter.HandleFunc("/like/{id}", postController.LikePost).Methods("PUT")
-	postRouter.HandleFunc("/{id}", postController.DeletePost).Methods("DELETE")
-	postRouter.HandleFunc("/{id}", postController.UpdatePost).Methods("PUT")
+	postRouter.HandleFunc("", postHandler.CreatePost).Methods("POST")
+	postRouter.HandleFunc("/{id}", postHandler.GetPostDetail).Methods("GET")
+	postRouter.HandleFunc("/timeline/{user_id}", postHandler.GetTimelinePosts).Methods("GET")
+	postRouter.HandleFunc("/user/{user_id}", postHandler.GetUserPosts).Methods("GET")
+	postRouter.HandleFunc("/like/{id}", postHandler.LikePost).Methods("PUT")
+	postRouter.HandleFunc("/{id}", postHandler.DeletePost).Methods("DELETE")
+	postRouter.HandleFunc("/{id}", postHandler.UpdatePost).Methods("PUT")
 
 	commentRouter := router.PathPrefix("/api/comment").Subrouter()
 	commentRouter.Use(middleware.CheckAuth)
-	commentRouter.HandleFunc("", commentController.AddComment).Methods("POST")
-	commentRouter.HandleFunc("/replies", commentController.ShowReplies).Methods("GET")
-	commentRouter.HandleFunc("/{commentId}", commentController.DeleteComment).Methods("DELETE")
-	commentRouter.HandleFunc("/show", commentController.ShowCommentsByPost).Methods("GET")
+	commentRouter.HandleFunc("", commentHandler.AddComment).Methods("POST")
+	commentRouter.HandleFunc("/replies", commentHandler.ShowReplies).Methods("GET")
+	commentRouter.HandleFunc("/{commentId}", commentHandler.DeleteComment).Methods("DELETE")
+	commentRouter.HandleFunc("/show", commentHandler.ShowCommentsByPost).Methods("GET")
 
 	communityRouter := router.PathPrefix("/api/community").Subrouter()
 	communityRouter.Use(middleware.CheckAuth)
-	communityRouter.HandleFunc("", communityController.CreateCommunity).Methods("POST")
-	communityRouter.HandleFunc("", communityController.GetCommunities).Methods("GET")
-	communityRouter.HandleFunc("/join/{community_id}", communityController.JoinCommunity).Methods("POST")
-	communityRouter.HandleFunc("/post/{id}", communityController.GetCommunityPosts).Methods("GET")
-	communityRouter.HandleFunc("/user", communityController.GetUserJoinedCommunities).Methods("POST")
-	communityRouter.HandleFunc("/{slug}", communityController.GetCommunityDetail).Methods("GET")
-	communityRouter.HandleFunc("/{id}", communityController.DeleteCommunity).Methods("DELETE")
-	communityRouter.HandleFunc("/{id}", communityController.UpdateCommunity).Methods("PUT")
+	communityRouter.HandleFunc("", communityHandler.CreateCommunity).Methods("POST")
+	communityRouter.HandleFunc("", communityHandler.GetCommunities).Methods("GET")
+	communityRouter.HandleFunc("/join/{community_id}", communityHandler.JoinCommunity).Methods("POST")
+	communityRouter.HandleFunc("/post/{id}", communityHandler.GetCommunityPosts).Methods("GET")
+	communityRouter.HandleFunc("/user", communityHandler.GetUserJoinedCommunities).Methods("POST")
+	communityRouter.HandleFunc("/{slug}", communityHandler.GetCommunityDetail).Methods("GET")
+	communityRouter.HandleFunc("/{id}", communityHandler.DeleteCommunity).Methods("DELETE")
+	communityRouter.HandleFunc("/{id}", communityHandler.UpdateCommunity).Methods("PUT")
 
 	fileRouter := router.PathPrefix("/api/file").Subrouter()
 	fileRouter.Use(middleware.CheckAuth)
-	fileRouter.HandleFunc("", fileUploadController.Upload).Methods("POST")
+	fileRouter.HandleFunc("", fileUploadHandler.Upload).Methods("POST")
 
 	notificationRouter := router.PathPrefix("/api/notification").Subrouter()
-	notificationRouter.HandleFunc("/list/{user_id}", notificationController.GetNotificationsByUser).Methods("GET")
+	notificationRouter.HandleFunc("/list/{user_id}", notificationHandler.GetNotificationsByUser).Methods("GET")
 
 	moderatorRouter := router.PathPrefix("/api/moderator").Subrouter()
 	moderatorRouter.Use(middleware.CheckAuth)
-	moderatorRouter.HandleFunc("/send", moderatorController.SendModeratorRequest).Methods("POST")
-	moderatorRouter.HandleFunc("/{id}", moderatorController.RemoveModerator).Methods("DELETE")
+	moderatorRouter.HandleFunc("/send", moderatorHandler.SendModeratorRequest).Methods("POST")
+	moderatorRouter.HandleFunc("/{id}", moderatorHandler.RemoveModerator).Methods("DELETE")
 
 	reportRouter := router.PathPrefix("/api/report").Subrouter()
 	reportRouter.Use(middleware.CheckAuth)
-	reportRouter.HandleFunc("", reportController.CreateReport).Methods("POST")
-	reportRouter.HandleFunc("/{id}", reportController.DeleteReport).Methods("DELETE")
+	reportRouter.HandleFunc("", reportHandler.CreateReport).Methods("POST")
+	reportRouter.HandleFunc("/{id}", reportHandler.DeleteReport).Methods("DELETE")
 
 	universityRouter := router.PathPrefix("/api/university").Subrouter()
 	universityRouter.Use(middleware.CheckAuth)
-	universityRouter.HandleFunc("", universityController.AddUniversity).Methods("POST")
-	universityRouter.HandleFunc("/{id}", universityController.UpdateUniversity).Methods("PUT")
-	universityRouter.HandleFunc("/{slug}", universityController.GetUniversityDetail).Methods("GET")
-	universityRouter.HandleFunc("", universityController.GetUniversities).Methods("GET")
-	universityRouter.HandleFunc("/review", universityController.AddReview).Methods("POST")
-	universityRouter.HandleFunc("/review/university_id", universityController.GetUniversityReviews).Methods("GET")
+	universityRouter.HandleFunc("", universityHandler.AddUniversity).Methods("POST")
+	universityRouter.HandleFunc("/{id}", universityHandler.UpdateUniversity).Methods("PUT")
+	universityRouter.HandleFunc("/{slug}", universityHandler.GetUniversityDetail).Methods("GET")
+	universityRouter.HandleFunc("", universityHandler.GetUniversities).Methods("GET")
+	universityRouter.HandleFunc("/review", universityHandler.AddReview).Methods("POST")
+	universityRouter.HandleFunc("/review/university_id", universityHandler.GetUniversityReviews).Methods("GET")
 
 	locationRouter := router.PathPrefix("/api/location").Subrouter()
 	locationRouter.Use(middleware.CheckAuth)
-	locationRouter.HandleFunc("", locationController.AddLocation).Methods("POST")
-	locationRouter.HandleFunc("", locationController.GetLocations).Methods("GET")
-	locationRouter.HandleFunc("/{id}", locationController.UpdateLocation).Methods("PUT")
+	locationRouter.HandleFunc("", locationHandler.AddLocation).Methods("POST")
+	locationRouter.HandleFunc("", locationHandler.GetLocations).Methods("GET")
+	locationRouter.HandleFunc("/{id}", locationHandler.UpdateLocation).Methods("PUT")
 
 	conversationRouter := router.PathPrefix("/api/conversation").Subrouter()
 	conversationRouter.Use(middleware.CheckAuth)
-	conversationRouter.HandleFunc("", conversationController.AddConversation).Methods("POST")
-	conversationRouter.HandleFunc("/{id}", conversationController.DeleteConversation).Methods("DELETE")
-	conversationRouter.HandleFunc("/{id}", conversationController.GetConversationDetail).Methods("GET")
-	conversationRouter.HandleFunc("/participant", conversationController.AddParticipant).Methods("POST")
-	conversationRouter.HandleFunc("/message", conversationController.AddMessage).Methods("POST")
-	conversationRouter.HandleFunc("/message/{conversation_id}", conversationController.RetrieveMessages).Methods("GET")
-	conversationRouter.HandleFunc("/all/{user_id}", conversationController.GetConversationsByUserID).Methods("GET")
+	conversationRouter.HandleFunc("", conversationHandler.AddConversation).Methods("POST")
+	conversationRouter.HandleFunc("/{id}", conversationHandler.DeleteConversation).Methods("DELETE")
+	conversationRouter.HandleFunc("/{id}", conversationHandler.GetConversationDetail).Methods("GET")
+	conversationRouter.HandleFunc("/participant", conversationHandler.AddParticipant).Methods("POST")
+	conversationRouter.HandleFunc("/message", conversationHandler.AddMessage).Methods("POST")
+	conversationRouter.HandleFunc("/message/{conversation_id}", conversationHandler.RetrieveMessages).Methods("GET")
+	conversationRouter.HandleFunc("/all/{user_id}", conversationHandler.GetConversationsByUserID).Methods("GET")
 
 	return router
 }

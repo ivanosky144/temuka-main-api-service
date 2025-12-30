@@ -2,141 +2,175 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
+	database "github.com/temuka-api-service/util/database"
 	"gorm.io/gorm"
 )
 
 type CommunityRepository interface {
-	CreateCommunity(context context.Context, community *model.Community) error
+	CreateCommunity(ctx context.Context, community *model.Community) error
 	CheckCommunityNameAvailability(ctx context.Context, name string) bool
-	UpdateCommunity(context context.Context, id int, community *model.Community) error
-	GetCommunities(context context.Context) ([]model.Community, error)
-	GetUserJoinedCommunities(context context.Context, userID int) ([]model.Community, error)
-	GetCommunityDetailByID(context context.Context, id int) (*model.Community, error)
+	UpdateCommunity(ctx context.Context, id int, community *model.Community) error
+	GetCommunities(ctx context.Context) ([]model.Community, error)
+	GetUserJoinedCommunities(ctx context.Context, userID int) ([]model.Community, error)
+	GetCommunityDetailByID(ctx context.Context, id int) (*model.Community, error)
 	CheckMembership(ctx context.Context, communityID, userID int) (*model.CommunityMember, error)
 	AddCommunityMember(ctx context.Context, member *model.CommunityMember) error
 	GetCommunityPosts(ctx context.Context, id int, filters map[string]interface{}) ([]model.CommunityPost, error)
-	UpdateCommunityPostsCount(context context.Context, id int) error
-	UpdateCommunityMembersCount(context context.Context, id int) error
-	DeleteCommunity(context context.Context, id int) error
+	UpdateCommunityPostsCount(ctx context.Context, id int) error
+	UpdateCommunityMembersCount(ctx context.Context, id int) error
+	DeleteCommunity(ctx context.Context, id int) error
 	GetCommunityDetailBySlug(ctx context.Context, slug string) (*model.Community, error)
 }
 
 type CommunityRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewCommunityRepository(db *gorm.DB) CommunityRepository {
+func NewCommunityRepository(db database.PostgresWrapper) CommunityRepository {
 	return &CommunityRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *CommunityRepositoryImpl) CreateCommunity(ctx context.Context, community *model.Community) error {
-	return r.db.WithContext(ctx).Create(community).Error
+	if err := r.db.Create(ctx, community); err != nil {
+		return fmt.Errorf("failed to create community: %w", err)
+	}
+	return nil
 }
 
 func (r *CommunityRepositoryImpl) CheckCommunityNameAvailability(ctx context.Context, name string) bool {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&model.Community{}).Where("name = ?", name).Count(&count).Error
+
+	err := r.db.Model(ctx, &model.Community{}).
+		Where("name = ?", name).
+		Count(&count).Error
+
 	if err != nil {
 		return false
 	}
+
 	return count == 0
 }
 
 func (r *CommunityRepositoryImpl) UpdateCommunity(ctx context.Context, id int, community *model.Community) error {
-	return r.db.WithContext(ctx).Model(&model.Community{}).Where("id = ?", id).Updates(community).Error
+	if err := r.db.Model(ctx, &model.Community{}).
+		Where("id = ?", id).
+		Updates(community).Error; err != nil {
+		return fmt.Errorf("failed to update community: %w", err)
+	}
+	return nil
 }
 
 func (r *CommunityRepositoryImpl) GetCommunityDetailByID(ctx context.Context, id int) (*model.Community, error) {
 	var community model.Community
-	if err := r.db.WithContext(ctx).First(&community, id).Error; err != nil {
-		return nil, err
+	if err := r.db.First(ctx, &community, id); err != nil {
+		return nil, fmt.Errorf("failed to get community detail: %w", err)
 	}
 	return &community, nil
 }
 
-func (r *CommunityRepositoryImpl) GetCommunities(context context.Context) ([]model.Community, error) {
+func (r *CommunityRepositoryImpl) GetCommunities(ctx context.Context) ([]model.Community, error) {
 	var communities []model.Community
-	if err := r.db.WithContext(context).Find(&communities).Error; err != nil {
-		return nil, err
+	if err := r.db.Find(ctx, &communities); err != nil {
+		return nil, fmt.Errorf("failed to get communities: %w", err)
 	}
 	return communities, nil
 }
 
-func (r *CommunityRepositoryImpl) DeleteCommunity(context context.Context, id int) error {
-	return r.db.WithContext(context).Delete(&model.Community{}, id).Error
+func (r *CommunityRepositoryImpl) DeleteCommunity(ctx context.Context, id int) error {
+	if err := r.db.Delete(ctx, &model.Community{}, id); err != nil {
+		return fmt.Errorf("failed to delete community: %w", err)
+	}
+	return nil
 }
 
 func (r *CommunityRepositoryImpl) AddCommunityMember(ctx context.Context, member *model.CommunityMember) error {
-	return r.db.WithContext(ctx).Create(member).Error
+	if err := r.db.Create(ctx, member); err != nil {
+		return fmt.Errorf("failed to add community member: %w", err)
+	}
+	return nil
 }
 
-func (r *CommunityRepositoryImpl) UpdateCommunityPostsCount(context context.Context, id int) error {
-	return r.db.WithContext(context).Model(&model.Community{}).Where("id = ?", id).
-		Update("posts_count", gorm.Expr("posts_count + 1")).Error
+func (r *CommunityRepositoryImpl) UpdateCommunityPostsCount(ctx context.Context, id int) error {
+	if err := r.db.Model(ctx, &model.Community{}).
+		Where("id = ?", id).
+		Update("posts_count", gorm.Expr("posts_count + 1")).Error; err != nil {
+		return fmt.Errorf("failed to update community posts count: %w", err)
+	}
+	return nil
 }
 
-func (r *CommunityRepositoryImpl) UpdateCommunityMembersCount(context context.Context, id int) error {
-	return r.db.WithContext(context).Model(&model.Community{}).Where("id = ?", id).
-		Update("members_count", gorm.Expr("members_count + 1")).Error
+func (r *CommunityRepositoryImpl) UpdateCommunityMembersCount(ctx context.Context, id int) error {
+	if err := r.db.Model(ctx, &model.Community{}).
+		Where("id = ?", id).
+		Update("members_count", gorm.Expr("members_count + 1")).Error; err != nil {
+		return fmt.Errorf("failed to update community members count: %w", err)
+	}
+	return nil
 }
 
 func (r *CommunityRepositoryImpl) CheckMembership(ctx context.Context, communityID, userID int) (*model.CommunityMember, error) {
 	var member model.CommunityMember
-	if err := r.db.Where("community_id = ? AND user_id = ?", communityID, userID).First(&member).Error; err != nil {
+
+	err := r.db.Where(ctx, "community_id = ? AND user_id = ?", communityID, userID).
+		First(&member).Error
+
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to check membership: %w", err)
 	}
+
 	return &member, nil
 }
 
 func (r *CommunityRepositoryImpl) GetCommunityPosts(ctx context.Context, communityID int, filters map[string]interface{}) ([]model.CommunityPost, error) {
-	var communityPosts []model.CommunityPost
+	var posts []model.CommunityPost
 
-	data := r.db.WithContext(ctx).Where("community_id = ?", communityID)
+	query := r.db.Where(ctx, "community_id = ?", communityID)
 
-	for key, val := range filters {
+	for key, value := range filters {
 		if key == "sort" || key == "sort_by" {
 			continue
 		}
-		data = data.Where(key+" = ?", val)
+		query = query.Where(key+" = ?", value)
 	}
 
-	sortBy, sortByExists := filters["sort_by"].(string)
-	sortOrder, sortOrderExists := filters["sort"].(string)
+	sortBy, sortExists := filters["sort_by"].(string)
+	sortOrder, orderExists := filters["sort"].(string)
 
-	if sortByExists && sortOrderExists {
-		data = data.Order(sortBy + " " + sortOrder)
-	} else if sortByExists {
-		data = data.Order(sortBy + "asc")
+	if sortExists && orderExists {
+		query = query.Order(sortBy + " " + sortOrder)
+	} else if sortExists {
+		query = query.Order(sortBy + " asc")
 	} else {
-		data = data.Order("created_at desc")
+		query = query.Order("created_at desc")
 	}
 
-	if err := data.Find(&communityPosts).Error; err != nil {
-		return nil, err
+	if err := query.Find(&posts).Error; err != nil {
+		return nil, fmt.Errorf("failed to get community posts: %w", err)
 	}
 
-	return communityPosts, nil
+	return posts, nil
 }
 
-func (r *CommunityRepositoryImpl) GetUserJoinedCommunities(context context.Context, userID int) ([]model.Community, error) {
+func (r *CommunityRepositoryImpl) GetUserJoinedCommunities(ctx context.Context, userID int) ([]model.Community, error) {
 	var communities []model.Community
 
-	query := `
+	rawQuery := `
 		SELECT c.*
 		FROM community_members cm
 		INNER JOIN communities c ON cm.community_id = c.id
 		WHERE cm.user_id = ? AND cm.banned = false
 	`
 
-	if err := r.db.WithContext(context).Raw(query, userID).Scan(&communities).Error; err != nil {
-		return nil, err
+	if err := r.db.DB.WithContext(ctx).Raw(rawQuery, userID).Scan(&communities).Error; err != nil {
+		return nil, fmt.Errorf("failed to get user joined communities: %w", err)
 	}
 
 	return communities, nil
@@ -144,8 +178,9 @@ func (r *CommunityRepositoryImpl) GetUserJoinedCommunities(context context.Conte
 
 func (r *CommunityRepositoryImpl) GetCommunityDetailBySlug(ctx context.Context, slug string) (*model.Community, error) {
 	var community model.Community
-	if err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&community).Error; err != nil {
-		return nil, err
+	err := r.db.Where(ctx, "slug = ?", slug).First(&community).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get community detail by slug: %w", err)
 	}
 	return &community, nil
 }

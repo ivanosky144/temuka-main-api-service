@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type LocationRepository interface {
@@ -16,39 +17,55 @@ type LocationRepository interface {
 }
 
 type LocationRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewLocationRepository(db *gorm.DB) LocationRepository {
+func NewLocationRepository(db database.PostgresWrapper) LocationRepository {
 	return &LocationRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *LocationRepositoryImpl) AddLocation(ctx context.Context, location *model.Location) error {
-	return r.db.WithContext(ctx).Create(location).Error
+	if err := r.db.Create(ctx, location); err != nil {
+		return fmt.Errorf("failed to add location: %w", err)
+	}
+	return nil
 }
 
 func (r *LocationRepositoryImpl) DeleteLocation(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.Location{}, id).Error
+	if err := r.db.Delete(ctx, &model.Location{}, id); err != nil {
+		return fmt.Errorf("failed to delete location: %w", err)
+	}
+	return nil
 }
 
 func (r *LocationRepositoryImpl) UpdateLocation(ctx context.Context, id int, location *model.Location) error {
-	return r.db.WithContext(ctx).Model(&model.Location{}).Where("id = ?", id).Updates(location).Error
+	q := r.db.Model(ctx, &model.Location{}).Where("id = ?", id)
+
+	if err := q.Updates(location).Error; err != nil {
+		return fmt.Errorf("failed to update location: %w", err)
+	}
+
+	return nil
 }
 
 func (r *LocationRepositoryImpl) GetLocations(ctx context.Context) ([]model.Location, error) {
 	var locations []model.Location
-	if err := r.db.WithContext(ctx).Find(&locations).Error; err != nil {
-		return nil, err
+
+	if err := r.db.Find(ctx, &locations); err != nil {
+		return nil, fmt.Errorf("failed to get locations: %w", err)
 	}
+
 	return locations, nil
 }
 
 func (r *LocationRepositoryImpl) GetLocationById(ctx context.Context, id int) (*model.Location, error) {
 	var location model.Location
-	if err := r.db.WithContext(ctx).First(&location, id).Error; err != nil {
-		return nil, err
+
+	if err := r.db.First(ctx, &location, id); err != nil {
+		return nil, fmt.Errorf("failed to get location by id: %w", err)
 	}
+
 	return &location, nil
 }

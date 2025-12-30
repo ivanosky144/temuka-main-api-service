@@ -2,9 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/temuka-api-service/internal/model"
-	"gorm.io/gorm"
+	database "github.com/temuka-api-service/util/database"
 )
 
 type MessageRepository interface {
@@ -13,19 +14,25 @@ type MessageRepository interface {
 }
 
 type MessageRepositoryImpl struct {
-	db *gorm.DB
+	db database.PostgresWrapper
 }
 
-func NewMessageRepositoryImpl(db *gorm.DB) MessageRepository {
+func NewMessageRepositoryImpl(db database.PostgresWrapper) MessageRepository {
 	return &MessageRepositoryImpl{
 		db: db,
 	}
 }
 
 func (r *MessageRepositoryImpl) CreateMessage(ctx context.Context, message *model.Message) error {
-	return r.db.WithContext(ctx).Create(message).Error
+	if err := r.db.Create(ctx, message); err != nil {
+		return fmt.Errorf("failed to create message: %w", err)
+	}
+	return nil
 }
 
 func (r *MessageRepositoryImpl) DeleteMessage(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.Message{}, id).Error
+	if err := r.db.Delete(ctx, &model.Message{}, id); err != nil {
+		return fmt.Errorf("failed to delete message: %w", err)
+	}
+	return nil
 }
